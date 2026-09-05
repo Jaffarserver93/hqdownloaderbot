@@ -1,14 +1,18 @@
 import pg from 'pg';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
 const { Pool } = pg;
 
 let pool = null;
 let isPostgres = false;
 
-// Local fallback store (for development without Postgres)
-const LOCAL_DB_DIR = path.resolve(process.cwd(), 'data');
+// Local fallback store: Use /tmp on Vercel/serverless (read-only filesystem workaround)
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const LOCAL_DB_DIR = isServerless 
+  ? path.join(os.tmpdir(), 'igbot_data')
+  : path.resolve(process.cwd(), 'data');
 const LOCAL_DB_FILE = path.join(LOCAL_DB_DIR, 'db.json');
 
 let localDbCache = {
@@ -19,8 +23,12 @@ let localDbCache = {
 let isLoaded = false;
 
 function ensureLocalDbFile() {
-  if (!fs.existsSync(LOCAL_DB_DIR)) {
-    fs.mkdirSync(LOCAL_DB_DIR, { recursive: true });
+  try {
+    if (!fs.existsSync(LOCAL_DB_DIR)) {
+      fs.mkdirSync(LOCAL_DB_DIR, { recursive: true });
+    }
+  } catch (e) {
+    // Ignore filesystem restriction on lambda
   }
   if (!isLoaded) {
     if (fs.existsSync(LOCAL_DB_FILE)) {

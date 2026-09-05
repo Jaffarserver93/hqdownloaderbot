@@ -32,8 +32,54 @@ export function extractInstagramShortcode(url) {
  */
 export function findInstagramUrlInText(text) {
   if (!text || typeof text !== 'string') return null;
-  const match = text.match(/https?:\/\/(?:www\.)?(?:instagram\.com|instagr\.am)\/[^\s]+/i);
+  const match = text.match(/https?:\/\/(?:www\.)?(?:instagram\.com|instagr\.am)\/[^\s"']+/i);
   return match ? match[0] : null;
+}
+
+/**
+ * Extracts an Instagram Reel or Post URL from any Meta message object
+ * Handles:
+ * - Direct text links (https://instagram.com/reel/...)
+ * - Shared Reel cards via the Instagram paper plane icon (message.attachments)
+ * - Instagram share sheet objects (message.share)
+ */
+export function extractInstagramUrlFromMessage(message) {
+  if (!message) return null;
+
+  // 1. Plain text check
+  if (message.text) {
+    const found = findInstagramUrlInText(message.text);
+    if (found) return found;
+  }
+
+  // 2. Attachments check (shared Reel, shared Post, story share)
+  if (Array.isArray(message.attachments)) {
+    for (const att of message.attachments) {
+      if (att.payload?.url) {
+        const found = findInstagramUrlInText(att.payload.url);
+        if (found) return found;
+      }
+      if (att.url) {
+        const found = findInstagramUrlInText(att.url);
+        if (found) return found;
+      }
+    }
+  }
+
+  // 3. Share sheet link
+  if (message.share?.link) {
+    const found = findInstagramUrlInText(message.share.link);
+    if (found) return found;
+  }
+
+  // 4. Fallback search across stringified message object
+  try {
+    const raw = JSON.stringify(message);
+    const found = findInstagramUrlInText(raw);
+    if (found) return found;
+  } catch {}
+
+  return null;
 }
 
 /**

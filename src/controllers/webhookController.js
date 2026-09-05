@@ -1,6 +1,7 @@
 import { nanoid } from 'nanoid';
 import {
   findInstagramUrlInText,
+  extractInstagramUrlFromMessage,
   extractInstagramMedia
 } from '../services/instagramExtractor.js';
 import {
@@ -94,8 +95,8 @@ async function processMessagingEvent(senderId, event) {
     return;
   }
 
-  // 3. Check if user sent an Instagram Reel or Post link
-  const instagramUrl = findInstagramUrlInText(rawText);
+  // 3. Check if user sent an Instagram Reel or Post link (text or shared attachment)
+  const instagramUrl = extractInstagramUrlFromMessage(message);
   if (instagramUrl) {
     await handleIncomingInstagramLink(senderId, instagramUrl);
     return;
