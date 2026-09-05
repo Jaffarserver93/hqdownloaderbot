@@ -48,16 +48,15 @@ export function verifyWebhook(req, res) {
  */
 export async function handleWebhookEvent(req, res) {
   const body = req.body;
+  console.log('[Webhook Incoming]', JSON.stringify(body));
 
-  // Always acknowledge immediately to prevent Meta timeout and repeated deliveries
-  res.status(200).send('EVENT_RECEIVED');
-
-  if (body.object !== 'instagram' && body.object !== 'page') {
-    return;
+  if (!body || (body.object !== 'instagram' && body.object !== 'page')) {
+    return res.status(200).send('EVENT_IGNORED');
   }
 
   const entries = body.entry || [];
   for (const entry of entries) {
+    // 1. Check standard messaging list
     const messagingList = entry.messaging || [];
     for (const event of messagingList) {
       const senderId = event.sender?.id;
@@ -69,7 +68,29 @@ export async function handleWebhookEvent(req, res) {
         console.error(`[Webhook] Error processing event for user ${senderId}:`, err.message);
       }
     }
+
+    // 2. Check changes list (Instagram Webhook field format)
+    const changesList = entry.changes || [];
+    for (const change of changesList) {
+      if (change.field === 'messages' && change.value) {
+        const val = change.value;
+        const senderId = val.sender?.id || val.from?.id;
+        if (!senderId) continue;
+
+        try {
+          await processMessagingEvent(senderId, {
+            message: val.message || val,
+            sender: { id: senderId }
+          });
+        } catch (err) {
+          console.error(`[Webhook] Error processing change event for user ${senderId}:`, err.message);
+        }
+      }
+    }
   }
+
+  // Acknowledge AFTER processing finishes so Vercel does not terminate lambda execution prematurely
+  return res.status(200).send('EVENT_RECEIVED');
 }
 
 /**
