@@ -25,7 +25,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Health Check & Status
 app.get('/', (req, res) => {
-  const botUsername = process.env.BOT_USERNAME || 'hqdownloaderbot';
+  const botUsername = (process.env.BOT_USERNAME || 'hqdownloaderbot').replace(/^@/, '');
   res.status(200).json({
     status: 'online',
     service: 'Instagram Reel Downloader Backend',
