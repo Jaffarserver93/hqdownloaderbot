@@ -11,95 +11,94 @@ function getPageAccessToken() {
 }
 
 /**
+ * Universal sender supporting both graph.instagram.com and graph.facebook.com
+ */
+async function postMessageToMeta(payload) {
+  const token = getPageAccessToken();
+  const isIgToken = token.startsWith('IGAA') || token.startsWith('IGQ');
+
+  const primaryUrl = isIgToken 
+    ? `https://graph.instagram.com/${GRAPH_API_VERSION}/me/messages`
+    : `https://graph.facebook.com/${GRAPH_API_VERSION}/me/messages`;
+
+  const fallbackUrl = isIgToken 
+    ? `https://graph.facebook.com/${GRAPH_API_VERSION}/me/messages`
+    : `https://graph.instagram.com/${GRAPH_API_VERSION}/me/messages`;
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`
+  };
+
+  try {
+    const response = await axios.post(primaryUrl, payload, {
+      params: { access_token: token },
+      headers,
+      timeout: 20000
+    });
+    return response.data;
+  } catch (err) {
+    console.warn(`[Meta Messenger] Primary endpoint (${primaryUrl}) failed: ${err.response?.data?.error?.message || err.message}. Trying fallback...`);
+    try {
+      const response = await axios.post(fallbackUrl, payload, {
+        params: { access_token: token },
+        headers,
+        timeout: 20000
+      });
+      return response.data;
+    } catch (fallbackErr) {
+      console.error(`[Meta Messenger] Both endpoints failed. Error:`, fallbackErr.response?.data || fallbackErr.message);
+      throw fallbackErr;
+    }
+  }
+}
+
+/**
  * Sends a plain text message to an Instagram user via Meta Messenger API
  */
 export async function sendInstagramTextMessage(recipientId, text) {
-  const token = getPageAccessToken();
-
-  try {
-    const response = await axios.post(
-      `https://graph.facebook.com/${GRAPH_API_VERSION}/me/messages`,
-      {
-        recipient: { id: recipientId },
-        message: { text }
-      },
-      {
-        params: { access_token: token },
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 15000
-      }
-    );
-    return response.data;
-  } catch (err) {
-    console.error(`[Meta Messenger] Error sending text message: ${err.response?.data?.error?.message || err.message}`);
-    throw err;
-  }
+  return postMessageToMeta({
+    recipient: { id: recipientId },
+    message: { text }
+  });
 }
 
 /**
  * Sends a message with interactive Quick Reply buttons to Instagram DM
  */
 export async function sendInstagramQuickReplies(recipientId, text, quickReplies) {
-  const token = getPageAccessToken();
-
-  try {
-    const response = await axios.post(
-      `https://graph.facebook.com/${GRAPH_API_VERSION}/me/messages`,
-      {
-        recipient: { id: recipientId },
-        message: {
-          text,
-          quick_replies: quickReplies.map(qr => ({
-            content_type: 'text',
-            title: qr.title.slice(0, 20), // Instagram limit for quick reply title is 20 chars
-            payload: qr.payload
-          }))
-        }
-      },
-      {
-        params: { access_token: token },
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 15000
-      }
-    );
-    return response.data;
-  } catch (err) {
-    console.error(`[Meta Messenger] Error sending quick replies: ${err.response?.data?.error?.message || err.message}`);
-    throw err;
-  }
+  return postMessageToMeta({
+    recipient: { id: recipientId },
+    message: {
+      text,
+      quick_replies: quickReplies.map(qr => ({
+        content_type: 'text',
+        title: qr.title.slice(0, 20),
+        payload: qr.payload
+      }))
+    }
+  });
 }
 
 /**
  * Sends a media attachment (video or audio) directly to Instagram DM
  */
 export async function sendInstagramMediaAttachment(recipientId, mediaType, mediaUrl) {
-  const token = getPageAccessToken();
-
   try {
-    const response = await axios.post(
-      `https://graph.facebook.com/${GRAPH_API_VERSION}/me/messages`,
-      {
-        recipient: { id: recipientId },
-        message: {
-          attachment: {
-            type: mediaType === 'audio' ? 'audio' : 'video',
-            payload: {
-              url: mediaUrl,
-              is_reusable: true
-            }
+    return await postMessageToMeta({
+      recipient: { id: recipientId },
+      message: {
+        attachment: {
+          type: mediaType === 'audio' ? 'audio' : 'video',
+          payload: {
+            url: mediaUrl,
+            is_reusable: true
           }
         }
-      },
-      {
-        params: { access_token: token },
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 25000
       }
-    );
-    return response.data;
+    });
   } catch (err) {
-    console.error(`[Meta Messenger] Error sending ${mediaType} attachment: ${err.response?.data?.error?.message || err.message}`);
-    // Non-fatal: if direct media upload fails, download links are still delivered via caption
+    console.error(`[Meta Messenger] Attachment send notice: ${err.message}`);
     return null;
   }
 }
